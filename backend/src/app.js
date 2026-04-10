@@ -16,14 +16,32 @@ const app = express();
 app.use(helmet());
 app.use(mongoSanitize()); // prevent NoSQL injection
 
+const ALLOWED_ORIGINS = [
+  "http://localhost:5173",
+  "http://localhost:3000",
+  ...(process.env.FRONTEND_URL
+    ? [process.env.FRONTEND_URL.replace(/\/$/, "")]   // strip trailing slash
+    : []),
+];
+
 app.use(
   cors({
-    origin: process.env.FRONTEND_URL || "http://localhost:5173",
+    origin: (origin, callback) => {
+      // allow curl / Postman (no origin) and whitelisted origins
+      if (!origin || ALLOWED_ORIGINS.includes(origin.replace(/\/$/, ""))) {
+        callback(null, true);
+      } else {
+        callback(new Error(`CORS blocked: ${origin}`));
+      }
+    },
     credentials: true,
-    methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
   })
 );
+
+// Explicitly handle preflight for all routes
+app.options("*", cors());
 
 // ── Rate Limiting ────────────────────────────────────────────────────────────
 const globalLimiter = rateLimit({
